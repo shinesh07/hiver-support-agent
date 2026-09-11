@@ -24,9 +24,16 @@ class ContextBudget:
         return self.system_limit + self.thread_limit + self.retrieval_limit + self.generation_limit
 
 
-def count_tokens(text: str) -> int:
-    """Approximate token count (1 token ≈ 4 chars)."""
-    return len(text) // 4
+import tiktoken
+
+def count_tokens(text: str, model: str = "gpt-4") -> int:
+    """Exact token counting to prevent context overflow (Fix for CJK/Emoji bombs)."""
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+        return len(encoding.encode(text))
+    except Exception:
+        # Fallback if tiktoken fails
+        return len(text) // 4
 
 
 def truncate_thread(turns: list[dict], budget: int = 1500) -> str:

@@ -102,13 +102,12 @@ def llm_escalation_judgment(
         # In mock mode or real mode, parse the JSON
         if isinstance(response, str):
             import json
+            import re
             try:
-                # Find JSON block
-                start = response.find('{')
-                end = response.rfind('}') + 1
-                if start >= 0 and end > start:
-                    data = json.loads(response[start:end])
-                    return data.get('escalate', True), data.get('reason', 'Parse successful')
+                # Strip markdown code blocks if the LLM adds them
+                clean_response = re.sub(r'```json\n|\n```|```', '', response).strip()
+                data = json.loads(clean_response)
+                return data.get('escalate', True), data.get('reason', 'Parse successful')
             except json.JSONDecodeError:
                 pass
         

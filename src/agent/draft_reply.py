@@ -40,4 +40,5 @@ def draft_reply(
             return response.strip()
         return "Sorry, I could not generate a response."
     except Exception as e:
-        return f"Error drafting reply: {str(e)}"
+        print(f"[INTERNAL ERROR] Draft Reply failed: {e}")
+        return "I am currently experiencing technical difficulties. Let me connect you to a human agent."
