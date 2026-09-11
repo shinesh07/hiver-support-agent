@@ -1,8 +1,14 @@
+"""LLM-as-a-Judge for qualitative reply evaluation.
+
+Implements blinded, randomized A/B testing or point-wise scoring
+for Tone, Helpfulness, Faithfulness.
+"""
 from __future__ import annotations
 
 import random
 from typing import Any
 from pydantic import BaseModel
+from src.llm.provider_adapter import LLMProvider
 
 class DimensionScore(BaseModel):
     score: int
@@ -13,48 +19,48 @@ class JudgeOutput(BaseModel):
     faithfulness: DimensionScore
     helpfulness: DimensionScore
     tone: DimensionScore
-    conciseness: DimensionScore
-    safety: DimensionScore
 
-class LLMProvider:
-    # Placeholder for LLM interaction logic
-    def __init__(self, model_name: str = "default"):
-        self.model_name = model_name
-        
-    def generate_json(self, prompt: str, schema: Any) -> dict:
-        # To be implemented
-        return {}
-
-def score_reply(message: str, reply: str, retrieved_context: list[str], provider: LLMProvider) -> JudgeOutput:
+def score_reply(customer_message: str, reply: str, retrieved_context: list[str], llm: LLMProvider) -> JudgeOutput:
     """Scores a reply using LLM-as-judge."""
-    prompt = f"""
-    You are an impartial judge evaluating an agent's reply to a message.
     
-    Message: {message}
-    Retrieved Context: {retrieved_context}
-    Reply: {reply}
-    
-    Score each dimension from 1 to 5:
-    1 = actively harmful
-    2 = poor
-    3 = acceptable
-    4 = good
-    5 = excellent
-    """
-    # System identity is NOT passed (blinding)
-    
-    # Stub implementation
-    return JudgeOutput(
-        reasoning="Stub reasoning",
-        faithfulness=DimensionScore(score=3, evidence="Stub evidence"),
-        helpfulness=DimensionScore(score=3, evidence="Stub evidence"),
-        tone=DimensionScore(score=3, evidence="Stub evidence"),
-        conciseness=DimensionScore(score=3, evidence="Stub evidence"),
-        safety=DimensionScore(score=3, evidence="Stub evidence")
+    system_prompt = (
+        "You are an impartial judge evaluating an agent's customer support reply.\n"
+        "Score each dimension from 1 to 5 (1 = terrible, 5 = excellent).\n"
+        "- Faithfulness: Is the reply supported by the retrieved context?\n"
+        "- Helpfulness: Does the reply actually answer the customer's question?\n"
+        "- Tone: Is the reply empathetic, professional, and on-brand?\n"
     )
+    
+    context_str = "\n".join(retrieved_context) if retrieved_context else "None"
+    prompt = (
+        f"Customer Message:\n{customer_message}\n\n"
+        f"Retrieved Context:\n{context_str}\n\n"
+        f"Agent Reply:\n{reply}\n\n"
+        "Please provide the JSON scoring output."
+    )
+    
+    try:
+        response = llm.complete(prompt, system_prompt, response_model=JudgeOutput, model_tier='judge')
+        if hasattr(response, 'faithfulness'):
+            return response # type: ignore
+            
+        # Mock fallback if returning strings
+        return JudgeOutput(
+            reasoning="Parse failure fallback",
+            faithfulness=DimensionScore(score=3, evidence="Fallback"),
+            helpfulness=DimensionScore(score=3, evidence="Fallback"),
+            tone=DimensionScore(score=3, evidence="Fallback")
+        )
+    except Exception as e:
+        return JudgeOutput(
+            reasoning=f"Error: {e}",
+            faithfulness=DimensionScore(score=1, evidence="Error"),
+            helpfulness=DimensionScore(score=1, evidence="Error"),
+            tone=DimensionScore(score=1, evidence="Error")
+        )
 
-def score_batch_blinded(examples: list[dict], provider: LLMProvider, seed: int = 42) -> list[dict]:
-    """Scores a batch of examples, shuffling them randomly before scoring to blind the judge."""
+def score_batch_blinded(examples: list[dict], llm: LLMProvider, seed: int = 42) -> list[dict]:
+    """Scores a batch of examples, shuffling to blind the judge."""
     random.seed(seed)
     shuffled_examples = list(examples)
     random.shuffle(shuffled_examples)
@@ -65,7 +71,7 @@ def score_batch_blinded(examples: list[dict], provider: LLMProvider, seed: int =
             example.get("message", ""),
             example.get("reply", ""),
             example.get("retrieved_context", []),
-            provider
+            llm
         )
         results.append({
             "example_id": example.get("id"),

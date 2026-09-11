@@ -25,7 +25,19 @@ class LLMProvider:
         
         if self.mock_mode:
             if response_model:
-                return response_model() # type: ignore
+                try:
+                    # Attempt to return a fake valid model
+                    if response_model.__name__ == 'JudgeOutput':
+                        from src.eval.llm_judge import DimensionScore
+                        return response_model(
+                            reasoning="Mock reasoning",
+                            faithfulness=DimensionScore(score=3, evidence="Mock"),
+                            helpfulness=DimensionScore(score=3, evidence="Mock"),
+                            tone=DimensionScore(score=3, evidence="Mock")
+                        )
+                except Exception:
+                    pass
+                return "Mock response"
             return "Mock response"
             
         # Real implementation would call OpenAI API

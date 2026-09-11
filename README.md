@@ -164,31 +164,17 @@ make index
 
 ### Running Evaluations
 
-Run evaluations across different system models, splits, and sample sizes:
+Run the comprehensive evaluation harness which compares the Trivial Baseline, the Simple Baseline, and the full Agent Pipeline across the evaluation set, computing McNemar's statistical significance tests:
 
 ```bash
-# Generic CLI command syntax
-python -m evaluate --model {trivial,simple,agent} --split {calibration,evaluation} --subsample N
+python -m src.eval.run_eval
 ```
 
-#### CLI Examples
+Run the threshold sweeper on the calibration set to optimize the Margin Band escalation thresholds using a shrinkage estimator:
 
-- **Trivial Model on Evaluation Split:**
-  ```bash
-  python -m evaluate --model trivial --split evaluation --subsample 200
-  ```
-- **Simple Baseline LLM on Evaluation Split:**
-  ```bash
-  python -m evaluate --model simple --split evaluation --subsample 200
-  ```
-- **Full Agent on Evaluation Split:**
-  ```bash
-  python -m evaluate --model agent --split evaluation --subsample 200
-  ```
-- **Agent on Calibration Split with 50 Samples:**
-  ```bash
-  python -m evaluate --model agent --split calibration --subsample 50
-  ```
+```bash
+python -m src.eval.threshold_sweep
+```
 
 ---
 
@@ -201,17 +187,16 @@ The evaluation harness evaluates customer support interactions across three comp
 1. **Trivial Baseline (`trivial`):**
    Deterministic rule-based model relying on keyword pattern matching and static canned responses. Serves as the lower baseline for response accuracy and escalation coverage.
 2. **Simple Baseline (`simple`):**
-   Standard zero-shot LLM without retrieval augmentation or escalation reasoning. Highlights default LLM behavior and susceptibility to hallucinations.
+   Standard ML baseline using k-NN for intent classification and Logistic Regression for escalation, fitted *only* on the calibration split to avoid train-test leakage.
 3. **Full Agent (`agent`):**
-   Full multi-tier system with hybrid escalation gates, FAISS semantic knowledge retrieval, schema-validated structured generation, and confidence checks.
+   Full multi-tier system with hybrid escalation gates (Hard Regex -> Margin Band -> LLM Judge), FAISS semantic knowledge retrieval, context budgeting with graceful truncation, and structured generation.
 
 ### Trustworthiness Metrics
 
 - **Groundedness & Context Adherence:** Degree to which response claims are supported by retrieved brand knowledge.
-- **Escalation Precision & Recall:** Accuracy in identifying inquiries requiring human intervention (severe frustration, account takeover, security-sensitive requests).
-- **Hallucination Rate:** Proportion of responses containing unsubstantiated product claims or fabricated procedures.
-- **Tone & Frustration Trajectory:** Measured via sentiment deltas between customer inbound and agent response.
-- **P95 Latency & Token Efficiency:** End-to-end response generation and retrieval latency.
+- **Escalation Recall (Ungrounded cases):** Explicit measurement of safety-critical escalation triggers when knowledge is missing.
+- **Escalation Precision:** Accuracy in identifying inquiries requiring human intervention (severe frustration, account takeover, security-sensitive requests).
+- **Statistical Rigor (McNemar's Test):** 95% Confidence Intervals comparing models on paired data.
 
 ### Calibration vs. Evaluation Splits
 
