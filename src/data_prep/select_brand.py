@@ -214,10 +214,6 @@ def compute_brand_stats(
         res_rate = compute_resolution_proxy(df, brand)
         print(f"  Resolution proxy rate: {res_rate:.4f}")
         
-        # 5. Composite score
-        composite = (lex_div * res_rate) / max(self_sim, 0.01)
-        print(f"  Composite score: {composite:.4f}")
-        
         results.append({
             'brand': brand,
             'conversation_count': int(brand_counts[brand]),
@@ -227,11 +223,23 @@ def compute_brand_stats(
             'reply_length_median': round(length_stats['median'], 1),
             'reply_length_iqr': round(length_stats['iqr'], 1),
             'resolution_proxy_rate': round(res_rate, 4),
-            'composite_score': round(composite, 4),
         })
+
+    # Convert to dataframe for vectorized normalization
+    stats_df = pd.DataFrame(results)
     
-    stats_df = pd.DataFrame(results).sort_values('composite_score', ascending=False)
-    return stats_df
+    # 5. Composite score (Issue #14 fix: Z-score normalization)
+    # Avoid division by zero by adding small epsilon to std
+    for col in ['lexical_diversity', 'resolution_proxy_rate', 'self_similarity']:
+        stats_df[f'{col}_z'] = (stats_df[col] - stats_df[col].mean()) / (stats_df[col].std() + 1e-9)
+    
+    # Composite = Z(lex_div) + Z(res_rate) - Z(self_sim)
+    stats_df['composite_score'] = stats_df['lexical_diversity_z'] + stats_df['resolution_proxy_rate_z'] - stats_df['self_similarity_z']
+    
+    # Drop temp columns
+    stats_df = stats_df.drop(columns=['lexical_diversity_z', 'resolution_proxy_rate_z', 'self_similarity_z'])
+    
+    return stats_df.sort_values('composite_score', ascending=False)
 
 
 def rank_brands(stats: pd.DataFrame) -> pd.DataFrame:

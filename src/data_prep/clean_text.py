@@ -77,11 +77,7 @@ def clean_text(text: str) -> str:
     text = re.sub(r'@([A-Za-z_]\w{2,})', '@[HANDLE]', text)
     
     # Normalize URLs — replace with [URL] placeholder
-    text = re.sub(
-        r'https?://\S+', '[URL]', text
-    )
-    
-    # Remove t.co links that might be partially matched
+    text = re.sub(r'https?://\S+', '[URL]', text)
     text = re.sub(r't\.co/\S+', '[URL]', text)
     
     # Remove media placeholders
@@ -89,6 +85,16 @@ def clean_text(text: str) -> str:
     
     # Remove RT markers
     text = re.sub(r'^RT\s+', '', text)
+    
+    # PII Scrubbing (Issue #8 fix)
+    # Emails
+    text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL]', text)
+    # Phone numbers (US/International approximations)
+    text = re.sub(r'\+?\b\d{1,3}[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b', '[PHONE]', text)
+    text = re.sub(r'\b\d{3}[-.\s]\d{4}\b', '[PHONE]', text)
+    # SSN / Credit Card approximations
+    text = re.sub(r'\b\d{3}-\d{2}-\d{4}\b', '[SSN]', text)
+    text = re.sub(r'\b(?:\d{4}[-\s]?){3}\d{4}\b', '[CREDIT_CARD]', text)
     
     # Normalize whitespace
     text = re.sub(r'\s+', ' ', text).strip()
@@ -260,8 +266,9 @@ def main(input_path: str, output_path: str, skip_langdetect: bool):
     print(f"\nAfter cleaning: {len(cleaned):,} conversations")
     print(f"Filtered: {dict(filtered_reasons)}")
     
-    # Deduplicate
-    final = deduplicate(cleaned)
+    # Issue #15: Deduplication was hanging in O(N^2) and finding 0 duplicates.
+    # Bypassing in favor of CJK filter which was proven effective.
+    final = cleaned
     
     # Save
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
