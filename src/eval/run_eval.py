@@ -50,12 +50,12 @@ def main():
     
     llm = LLMProvider(mock_mode=True) # Use mock mode for speed during testing
     
-    retriever = RetrievalIndex()
+    retriever = RetrievalIndex(embedder=simple.embedder)
     retriever.load('data/index/faiss.index', 'data/index/metadata.pkl')
     
     intent_classifier = IntentClassifier(llm=llm, knn=simple.knn, knn_intents=simple.corpus_intents, embedder=simple.embedder)
     
-    ood_detector = OODDetector()
+    ood_detector = OODDetector(embedder=simple.embedder)
     ood_detector.load('data/processed/cluster_centroids.npy', 'data/processed/ood_threshold.json')
     
     with open('data/processed/thresholds.json') as f:

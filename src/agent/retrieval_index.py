@@ -22,8 +22,11 @@ from tqdm import tqdm
 
 
 class RetrievalIndex:
-    def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):
-        self.embedder = SentenceTransformer(model_name)
+    def __init__(self, model_name: str = 'all-MiniLM-L6-v2', embedder=None):
+        if embedder:
+            self.embedder = embedder
+        else:
+            self.embedder = SentenceTransformer(model_name)
         self.index = None
         self.metadata = []
         

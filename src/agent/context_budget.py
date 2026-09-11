@@ -80,7 +80,8 @@ def truncate_retrievals(retrievals: list[dict], budget: int = 2000) -> list[str]
         tokens = count_tokens(full_str)
         if tokens > per_example_budget:
             # Issue #13 fix: Truncate instead of dropping
-            allowed_chars = per_example_budget * 4
+            # Prevent negative slicing if budget is extremely small
+            allowed_chars = max(25, per_example_budget * 4)
             full_str = full_str[:allowed_chars-20] + "... [TRUNCATED]\n"
             
         formatted_sources.append(full_str.strip())
