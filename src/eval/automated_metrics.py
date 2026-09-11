@@ -1,56 +1,72 @@
+"""Automated evaluation metrics.
+
+Calculates intent accuracy, escalation recall/precision, and cost.
+"""
 from __future__ import annotations
+import math
 
-import numpy as np
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, confusion_matrix
+def compute_intent_metrics(y_true: list[str], y_pred: list[str]) -> dict:
+    """Compute standard classification metrics for intent."""
+    if not y_true:
+        return {'accuracy': 0.0}
+        
+    correct = sum(1 for yt, yp in zip(y_true, y_pred) if yt == yp)
+    return {'accuracy': correct / len(y_true)}
 
-def compute_intent_metrics(predictions: list[str], labels: list[str]) -> dict:
-    """Computes automated metrics for intent classification."""
-    labels_unique = list(set(labels) | set(predictions))
-    acc = accuracy_score(labels, predictions)
-    macro_f1 = f1_score(labels, predictions, average='macro', zero_division=0)
-    per_class_f1_array = f1_score(labels, predictions, average=None, labels=labels_unique, zero_division=0)
-    per_class_f1 = dict(zip(labels_unique, per_class_f1_array))
-    cm = confusion_matrix(labels, predictions, labels=labels_unique).tolist()
+def compute_escalation_metrics(
+    true_escalate: list[bool],
+    pred_escalate: list[bool],
+    grounding_available: list[bool]
+) -> dict:
+    """
+    Computes Escalation metrics.
+    Fixes Issue #2: We explicitly track Recall on ungrounded cases 
+    (where we MUST escalate) and Precision on the full set.
+    """
+    if not true_escalate:
+        return {}
+        
+    # Recall on ungrounded cases (Critical Safety Metric)
+    # y_true = NOT grounded
+    n_ungrounded = sum(1 for g in grounding_available if not g)
+    tp_ungrounded = sum(1 for i, g in enumerate(grounding_available) if not g and pred_escalate[i])
+    
+    recall_ungrounded = tp_ungrounded / n_ungrounded if n_ungrounded > 0 else 1.0
+    
+    # Overall Escalation Rate
+    escalation_rate = sum(pred_escalate) / len(pred_escalate)
+    
+    # Overall Precision: Of the things we escalated, how many ACTUALLY needed it?
+    tp_all = sum(1 for t, p in zip(true_escalate, pred_escalate) if t and p)
+    precision = tp_all / sum(pred_escalate) if sum(pred_escalate) > 0 else 0.0
+    
+    # Overall Recall
+    recall_all = tp_all / sum(true_escalate) if sum(true_escalate) > 0 else 1.0
     
     return {
-        "accuracy": acc,
-        "macro_f1": macro_f1,
-        "per_class_f1": per_class_f1,
-        "confusion_matrix": cm
+        'recall_ungrounded': recall_ungrounded,
+        'overall_precision': precision,
+        'overall_recall': recall_all,
+        'escalation_rate': escalation_rate,
+        'f1': 2 * (precision * recall_all) / (precision + recall_all) if (precision + recall_all) > 0 else 0.0
     }
 
-def compute_escalation_metrics(predictions: list[bool], labels: list[bool]) -> dict:
-    """Computes automated metrics for escalation logic."""
-    precision = precision_score(labels, predictions, zero_division=0)
-    recall = recall_score(labels, predictions, zero_division=0)
-    f1 = f1_score(labels, predictions, zero_division=0)
-    
-    # False auto handle rate: predicted False, label True
-    # False escalate rate: predicted True, label False
-    fn = sum(1 for p, l in zip(predictions, labels) if not p and l)
-    fp = sum(1 for p, l in zip(predictions, labels) if p and not l)
-    tn = sum(1 for p, l in zip(predictions, labels) if not p and not l)
-    tp = sum(1 for p, l in zip(predictions, labels) if p and l)
-    
-    false_auto_handle_rate = fn / (fn + tp) if (fn + tp) > 0 else 0.0
-    false_escalate_rate = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+def compute_latency_cost(
+    agent_calls: int,
+    judge_calls: int,
+    avg_tokens_per_call: int = 1500
+) -> dict:
+    """
+    Estimates latency and cost based on LLM calls.
+    Mock values for demonstration.
+    """
+    # E.g. $0.50 per 1M tokens for Agent, $10 per 1M for Judge
+    agent_cost = (agent_calls * avg_tokens_per_call / 1_000_000) * 0.50
+    judge_cost = (judge_calls * avg_tokens_per_call / 1_000_000) * 10.0
     
     return {
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
-        "false_auto_handle_rate": false_auto_handle_rate,
-        "false_escalate_rate": false_escalate_rate
-    }
-
-def compute_latency_cost(results: list[dict]) -> dict:
-    """Computes latency and cost metrics from a list of results."""
-    latencies = [r.get("latency_ms", 0) for r in results]
-    costs = [r.get("cost_usd", 0.0) for r in results]
-    
-    return {
-        "latency_p50": float(np.percentile(latencies, 50)) if latencies else 0.0,
-        "latency_p95": float(np.percentile(latencies, 95)) if latencies else 0.0,
-        "mean_cost_per_request": float(np.mean(costs)) if costs else 0.0,
-        "total_cost": sum(costs)
+        'total_cost': agent_cost + judge_cost,
+        'agent_cost': agent_cost,
+        'judge_cost': judge_cost,
+        'total_llm_calls': agent_calls + judge_calls
     }

@@ -1,44 +1,71 @@
+"""Agreement and statistical significance testing.
+
+Includes McNemar's test implementation for rigorous statistical comparison
+between models (Issue #4 fix).
+"""
 from __future__ import annotations
 
-import numpy as np
-from sklearn.metrics import cohen_kappa_score
+import math
+from typing import Sequence
+import pandas as pd
+from scipy.stats import chi2
 
-def compute_agreement(human_scores: list[dict], judge_scores: list[dict]) -> dict:
-    """Computes human-judge agreement per dimension."""
-    dimensions = ["faithfulness", "helpfulness", "tone", "conciseness", "safety"]
-    agreement = {}
+
+def compute_mcnemars_test(y_true: Sequence[bool], y_model_a: Sequence[bool], y_model_b: Sequence[bool]) -> dict:
+    """
+    Computes McNemar's test to compare two classifiers on paired data.
+    Resolves Issue #4 (bare 2% cutoff is statistically invalid).
     
-    for dim in dimensions:
-        human_dim_scores = [hs.get(dim, 3) for hs in human_scores]
-        judge_dim_scores = [js.get(dim, 3) for js in judge_scores]
+    y_true: Ground truth binary labels
+    y_model_a: Predictions from Model A (e.g., Simple Baseline)
+    y_model_b: Predictions from Model B (e.g., Agent Pipeline)
+    """
+    if len(y_true) != len(y_model_a) or len(y_true) != len(y_model_b):
+        raise ValueError("All arrays must be the same length")
         
-        qwk = cohen_kappa_score(human_dim_scores, judge_dim_scores, weights='quadratic')
-        exact_match = sum(1 for h, j in zip(human_dim_scores, judge_dim_scores) if h == j) / max(len(human_dim_scores), 1)
-        within_one = sum(1 for h, j in zip(human_dim_scores, judge_dim_scores) if abs(h - j) <= 1) / max(len(human_dim_scores), 1)
-        mean_bias = np.mean(np.array(judge_dim_scores) - np.array(human_dim_scores)) if human_dim_scores else 0.0
+    n = len(y_true)
+    if n == 0:
+        return {'statistic': 0.0, 'p_value': 1.0, 'significant': False, 'n': 0}
         
-        agreement[dim] = {
-            "quadratic_weighted_kappa": float(qwk),
-            "exact_match_pct": exact_match,
-            "within_one_pct": within_one,
-            "mean_bias": float(mean_bias)
-        }
-        
-    return agreement
-
-def stratified_agreement(human_scores: list[dict], judge_scores: list[dict], difficulty_tiers: list[str]) -> dict:
-    """Breaks down agreement by easy/hard tier."""
-    result = {}
-    unique_tiers = set(difficulty_tiers)
+    # Get correctness vectors
+    a_correct = [y_true[i] == y_model_a[i] for i in range(n)]
+    b_correct = [y_true[i] == y_model_b[i] for i in range(n)]
     
-    for tier in unique_tiers:
-        tier_indices = [i for i, t in enumerate(difficulty_tiers) if t == tier]
-        tier_human = [human_scores[i] for i in tier_indices]
-        tier_judge = [judge_scores[i] for i in tier_indices]
-        result[tier] = compute_agreement(tier_human, tier_judge)
+    # Contingency table cells
+    # n_01: B correct, A incorrect
+    # n_10: A correct, B incorrect
+    n_11 = sum(1 for i in range(n) if a_correct[i] and b_correct[i])
+    n_10 = sum(1 for i in range(n) if a_correct[i] and not b_correct[i])
+    n_01 = sum(1 for i in range(n) if not a_correct[i] and b_correct[i])
+    n_00 = sum(1 for i in range(n) if not a_correct[i] and not b_correct[i])
+    
+    # McNemar's test statistic (with continuity correction)
+    b = n_10
+    c = n_01
+    
+    if b + c == 0:
+        stat = 0.0
+        p_val = 1.0
+    else:
+        stat = ((abs(b - c) - 1) ** 2) / (b + c)
+        p_val = chi2.sf(stat, df=1)
         
-    return result
-
-def check_prompt_order_bias(original_scores: list[dict], reordered_scores: list[dict]) -> dict:
-    """Compares scores with reordered rubric dimensions."""
-    return compute_agreement(original_scores, reordered_scores)
+    # Accuracy difference with 95% Confidence Interval (Wald interval)
+    acc_diff = (c - b) / n
+    se = math.sqrt((b + c) / (n ** 2) - ((c - b) ** 2) / (n ** 3))
+    z = 1.96 # 95% CI
+    ci_lower = acc_diff - z * se
+    ci_upper = acc_diff + z * se
+    
+    return {
+        'n': n,
+        'accuracy_a': sum(a_correct) / n,
+        'accuracy_b': sum(b_correct) / n,
+        'accuracy_diff': acc_diff,
+        'ci_95_lower': ci_lower,
+        'ci_95_upper': ci_upper,
+        'contingency_table': {'n_11': n_11, 'n_10': n_10, 'n_01': n_01, 'n_00': n_00},
+        'statistic': stat,
+        'p_value': p_val,
+        'significant': p_val < 0.05
+    }
