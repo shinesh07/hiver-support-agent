@@ -17,10 +17,10 @@ class Report(FPDF):
         if self.page_no() == 1:
             return
         self.set_font('body', 'I', 8)
-        self.set_text_color(130, 130, 130)
+        self.set_text_color(0, 0, 0)
         self.cell(0, 8, 'Hiver Customer Support Agent \u2014 Technical Report', align='L')
         self.cell(0, 8, f'Page {self.page_no()}', align='R', new_x="LMARGIN", new_y="NEXT")
-        self.set_draw_color(200, 200, 200)
+        self.set_draw_color(0, 0, 0)
         self.line(10, self.get_y(), 200, self.get_y())
         self.ln(4)
 
@@ -28,35 +28,35 @@ class Report(FPDF):
         if self.page_no() == 1:
             self.set_y(-15)
             self.set_font('body', 'I', 7)
-            self.set_text_color(150, 150, 150)
+            self.set_text_color(0, 0, 0)
             self.cell(0, 10, 'Confidential \u2014 For Hiver Hiring Review Only', align='C')
 
     def section_title(self, title):
         self.set_font('body', 'B', 13)
-        self.set_text_color(25, 60, 120)
+        self.set_text_color(0, 0, 0)
         self.ln(3)
         self.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
-        self.set_draw_color(25, 60, 120)
+        self.set_draw_color(0, 0, 0)
         self.line(10, self.get_y(), 80, self.get_y())
         self.ln(4)
 
     def subsection_title(self, title):
         self.set_font('body', 'B', 10.5)
-        self.set_text_color(50, 50, 50)
+        self.set_text_color(0, 0, 0)
         self.ln(2)
         self.cell(0, 7, title, new_x="LMARGIN", new_y="NEXT")
         self.ln(1)
 
     def body_text(self, text):
         self.set_font('body', '', 9.5)
-        self.set_text_color(40, 40, 40)
+        self.set_text_color(0, 0, 0)
         self.multi_cell(0, 5, text)
         self.ln(1)
 
     def bullet(self, text, indent=15):
         x = self.get_x()
         self.set_font('body', '', 9.5)
-        self.set_text_color(40, 40, 40)
+        self.set_text_color(0, 0, 0)
         self.set_x(x + indent)
         self.cell(4, 5, '\u2022')
         self.multi_cell(0, 5, text)
@@ -66,7 +66,7 @@ class Report(FPDF):
         x = self.get_x()
         self.set_x(x + indent)
         self.set_font('body', '', 9.5)
-        self.set_text_color(40, 40, 40)
+        self.set_text_color(0, 0, 0)
         self.cell(4, 5, '\u2022')
         self.set_font('body', 'B', 9.5)
         self.write(5, f'{label}: ')
@@ -79,7 +79,7 @@ class Report(FPDF):
         if fill:
             self.set_fill_color(235, 240, 250)
         self.set_font('body', 'B' if bold else '', 9)
-        self.set_text_color(40, 40, 40)
+        self.set_text_color(0, 0, 0)
         for i, (cell, w) in enumerate(zip(cells, widths)):
             self.cell(w, h, cell, border=1, fill=fill, align='C' if i > 0 else 'L')
         self.ln(h)
@@ -92,23 +92,23 @@ def build():
     pdf.add_page()
     pdf.ln(50)
     pdf.set_font('body', 'B', 28)
-    pdf.set_text_color(25, 60, 120)
+    pdf.set_text_color(0, 0, 0)
     pdf.cell(0, 14, 'Hiver Customer Support Agent', align='C', new_x="LMARGIN", new_y="NEXT")
     pdf.set_font('body', '', 15)
-    pdf.set_text_color(80, 80, 80)
+    pdf.set_text_color(0, 0, 0)
     pdf.cell(0, 10, 'Technical Report', align='C', new_x="LMARGIN", new_y="NEXT")
     pdf.ln(8)
-    pdf.set_draw_color(25, 60, 120)
+    pdf.set_draw_color(0, 0, 0)
     pdf.line(60, pdf.get_y(), 150, pdf.get_y())
     pdf.ln(12)
     pdf.set_font('body', '', 11)
-    pdf.set_text_color(60, 60, 60)
+    pdf.set_text_color(0, 0, 0)
     pdf.cell(0, 7, 'Brand: AmazonHelp  |  Dataset: Twitter Customer Support Corpus', align='C', new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 7, 'Architecture: RAG + 3-Layer Escalation Router', align='C', new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 7, 'Golden Set: 200 Stratified Examples (60 Cal / 140 Eval)', align='C', new_x="LMARGIN", new_y="NEXT")
     pdf.ln(20)
     pdf.set_font('body', '', 10)
-    pdf.set_text_color(100, 100, 100)
+    pdf.set_text_color(0, 0, 0)
     pdf.cell(0, 7, 'Repository: github.com/shinesh07/hiver-support-agent', align='C', new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 7, 'September 2026', align='C', new_x="LMARGIN", new_y="NEXT")
 
