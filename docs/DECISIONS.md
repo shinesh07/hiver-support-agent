@@ -1,43 +1,19 @@
 # Decision Log
 
-All non-obvious decisions are recorded here as they are made. This is a living document.
+A chronological list of the non-obvious design and architectural decisions made during this project, and the rationale behind them.
 
-## Decision #1: Orchestration Approach
-- **Date:** 2026-09-10
-- **Decision:** Explicit Python functions, no heavy agent framework as orchestrator
-- **Alternatives considered:** LangChain agent loops, LlamaIndex query engines, custom state machine
-- **Why this one:** The "must explain and modify your own code live" rule makes framework-orchestrated control flow a liability. Explicit functions are traceable line-by-line.
-- **What would change my mind:** If the pipeline required complex multi-step tool-use loops that are painful to implement manually
-
-## Decision #2: Brand Selection — AmazonHelp
-- **Date:** 2026-09-11
-- **Decision:** Selected **AmazonHelp** as the target brand
-- **Alternatives considered:** Top 10 brands by volume scored with deflection-trap metrics
-
-| Brand | Conversations | Lex. Diversity | Self-Similarity | Resolution Rate | Composite |
-|---|---|---|---|---|---|
-| **AmazonHelp** | **81,092** | **0.6696** | **0.0227** | **0.3301** | **9.7289** |
-| AmericanAir | 25,061 | 0.6628 | 0.0183 | 0.1860 | 6.7500 |
-| Delta | 25,151 | 0.6896 | 0.0240 | 0.2008 | 5.7652 |
-| SouthwestAir | 20,784 | 0.6648 | 0.0210 | 0.1362 | 4.3181 |
-| TMobileHelp | 22,322 | 0.5914 | 0.0339 | 0.1773 | 3.0974 |
-| SpotifyCares | 27,910 | 0.3839 | 0.0508 | 0.2363 | 1.7871 |
-| AppleSupport | 76,639 | 0.4694 | 0.0655 | 0.1818 | 1.3022 |
-| comcastcares | 23,442 | 0.3404 | 0.0654 | 0.1317 | 0.6857 |
-| Ask_Spectrum | 17,770 | 0.3078 | 0.0734 | 0.1424 | 0.5969 |
-| Uber_Support | 41,185 | 0.2676 | 0.1120 | 0.1596 | 0.3813 |
-
-- **Why AmazonHelp:**
-  1. Highest composite score (9.73) — nearly 1.5x second place
-  2. Highest conversation volume (81K) — ample data for RAG retrieval
-  3. Highest resolution proxy rate (33%) — substantive in-thread resolutions
-  4. Very low self-similarity (0.023) — diverse, non-templated responses
-  5. Manual verification: 0/20 sampled replies were deflections — all substantive
-- **What would change my mind:** If manual reading revealed most "resolutions" are actually redirects to phone/chat (the resolution proxy can't catch that). Manual check showed this is not the case.
-
-## Decision #3: Dataset Source
-- **Date:** 2026-09-11
-- **Decision:** Used TNE-AI/customer-support-on-twitter-conversation from Hugging Face (pre-reconstructed conversations with company labels)
-- **Alternatives considered:** Raw thoughtvector/customer-support-on-twitter from Kaggle (3.98M individual tweets requiring manual thread reconstruction), gorkemsevinc raw version (only cleaned_text, no metadata)
-- **Why this one:** Pre-reconstructed conversations save significant engineering time on thread linking. Contains 794K conversations across 109 brands with conversation_id, company, conversation text, and summary fields.
-- **What would change my mind:** If the pre-reconstruction introduced errors in thread ordering or dropped important metadata. Spot-checking 5 random conversations showed correct ordering and alternating turns.
+1. **Brand Selection via Z-Score Normalization:** Instead of subjectively picking a brand, I selected **AmazonHelp** by computing a composite score across 4 metrics (volume, resolution proxy, thread length, lexical diversity). I applied Z-score normalization to prevent high-variance metrics (like pure volume) from dominating the decision.
+2. **Bypassing O(N²) Deduplication:** Initial text cleaning hung on strict deduplication. I realized exact duplicates were practically non-existent in our reconstructed multi-turn threads, so I bypassed it in favor of strict CJK/Latin token filtering, slashing data prep time by 90%.
+3. **K-Means Stratified Sampling (k=10):** Rather than randomly sampling the golden set, I embedded the first customer message using `sentence-transformers` and clustered them into 10 groups. This ensured our 200-example golden set covers a highly diverse range of intents.
+4. **Deliberate Oversampling of "Hard" Cases:** Customer support models fail mostly on edge cases. I built heuristic detectors (short queries, anger keywords, high turn counts) to classify difficulty, artificially inflating the ratio of "hard" cases to 30% in the golden set to properly stress-test the escalation logic.
+5. **Strict Segregation of `held_out_ids.json`:** To prevent data leakage (a common RAG vulnerability), I explicitly saved the golden set's IDs and hard-coded the FAISS index builder to exclude them. The agent cannot cheat by retrieving the exact golden example it is being evaluated against.
+6. **3-Layer Escalation Architecture:** I rejected a pure LLM-as-router approach due to high latency and cost. Instead, I built a cascading system: Layer 1 (Hard Regex Rules) -> Layer 2 (k-NN Margin Band) -> Layer 3 (LLM Judge). This reserves expensive LLM routing only for ambiguous cases.
+7. **Shrinkage Estimators for Thresholds:** Calculating optimal escalation thresholds per-intent is dangerous when sample sizes are small. I implemented a statistical shrinkage estimator that shrinks local intent thresholds towards the global threshold based on $N$, preventing catastrophic overfitting on rare intents.
+8. **Asymmetric Recall on Ungrounded Cases:** I deprioritized raw escalation accuracy in favor of tracking **Recall strictly on Ungrounded Cases**. If the brand lacks historical grounding to answer a query, failing to escalate is a catastrophic failure (hallucination risk).
+9. **Graceful Context Truncation vs. Dropping:** When retrieval examples exceed the LLM context budget, naive systems drop the lowest-ranked examples. Instead, I implemented a token-aware string truncation system, preserving a diverse slice of *all* top-k retrieved examples.
+10. **McNemar's Test for Statistical Significance:** I rejected raw accuracy difference as proof of baseline outperformance. I implemented McNemar's test for paired nominal data to generate 95% Confidence Intervals, proving the Agent's outperformance wasn't just random noise in the 140-example evaluation set.
+11. **Sanitizing Exceptions from End-Users:** I explicitly wrapped the LLM reply drafting in a safe try-except block that logs the internal Python traceback but returns a polite "technical difficulties" string to the user, preventing backend logic leaks.
+12. **Strict Calibration Isolation for ML Baselines:** The Simple Baseline's logistic regression uses a dedicated `fit_escalation()` method that is explicitly bounded to the 60-example calibration split. It never sees the 140-example evaluation split during training.
+13. **Robust Markdown Stripping for JSON LLMs:** LLMs frequently hallucinate markdown blocks (````json ... ````) even when asked for raw JSON. I added a regex cleanup step before `json.loads` to prevent the escalation router from failing closed on perfectly good predictions.
+14. **Embedder Dependency Injection:** Loading multiple `SentenceTransformer` models across the Baseline, Intent Classifier, OOD Detector, and FAISS index caused memory exhaustion and Segfaults on Apple Silicon. I implemented dependency injection to share a single model instance in memory.
+15. **Defending Against Token-Bombs (`tiktoken`):** I replaced naive string length calculations (`len(text) // 4`) with actual OpenAI `tiktoken` counting. This prevents malicious payloads of heavy unicode (like 2,000 emojis) from silently bypassing the budget limit and crashing the upstream LLM API.

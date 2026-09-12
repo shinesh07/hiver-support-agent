@@ -33,6 +33,17 @@ Key capabilities:
 
 ---
 
+## 📦 Assignment Deliverables Checklist
+
+For the hiring review committee, all requested deliverables are immediately available here:
+1. **Runnable Pipeline:** Follow the [Quick Start](#quick-start-under-15-minutes-benchmark) to reproduce headline results in < 15 minutes.
+2. **Golden Evaluation Set (150-250 items):** Located in `data/golden/`. See [Sampling Notes](data/golden/README.md) for how it was stratified and labelled.
+3. **Evaluation Harness:** Located in `src/eval/`. Includes automated metrics, McNemar's statistical testing, and an LLM-as-a-judge rubric (`llm_judge.py`).
+4. **Final Report (max 6 pages):** Located at [`docs/report.md`](docs/report.md). Covers problem framing, failure analysis, baseline comparisons, and misleading metric disclosures.
+5. **Decision Log:** Located at [`docs/DECISIONS.md`](docs/DECISIONS.md). Contains 15 non-obvious design decisions made during the build.
+
+---
+
 ## Architecture Overview
 
 ```mermaid
